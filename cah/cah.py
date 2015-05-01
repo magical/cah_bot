@@ -81,9 +81,9 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         self.white_discard += self.players[player]
 
         # Remove player
-        del(self.players[player])
+        del self.players[player]
         if player in self.kick_votes:
-            del(self.kick_votes[player])
+            del self.kick_votes[player]
 
         if player in self.player_queue:
             self.player_queue.remove(player)
@@ -95,7 +95,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             if player in self.avail_players:
                 if player in self.answers:
                     self.white_discard += self.answers[player]
-                    del(self.answers[player])
+                    del self.answers[player]
                 self.avail_players.remove(player)
             elif player == self.dealer:
                 bot.reply(comm, "[*] Game restarting... dealer left.")
@@ -185,7 +185,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             if p not in self.players:
                 bot.reply(comm, '{0} has joined the game!'.format(p))
             self.deal(p)
-        del(self.player_queue[:])
+        del self.player_queue[:]
 
         if len(self.players) > 2:
             self.prep_play(bot, comm)
@@ -463,7 +463,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
             if user in self.plugin.answers:
                 self.plugin.players[user] += self.plugin.answers[user]
-                del(self.plugin.answers[user])
+                del self.plugin.answers[user]
 
             self.plugin.answers[user] = [self.plugin.players[user][i - 1]
                                     for i in indices]
