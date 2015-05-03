@@ -102,7 +102,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                 self.reset(bot, comm)
 
             if len(self.players) < 3:
-                bot.reply(comm, "[*] There are less than 3 players playing "
+                bot.reply(comm, "[*] There are fewer than 3 players playing "
                             "now. Waiting for more players...")
                 self.reset(bot, comm)
             # Check to see if all cards are now submitted.
