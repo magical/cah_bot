@@ -287,9 +287,8 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         scores_str = '{:^14} {:^14}\n____________________________'
         bot.reply(comm, scores_str.format('User', 'Score'))
         scores_str = '{:^14}|{:^14}'
-        num_top = 5 if len(top) > 4 else len(top)
-        scores = '\n'.join([scores_str.format(top[x].user, str(top[x].score))
-                            for x in xrange(num_top)])
+        scores = '\n'.join(scores_str.format(x.user, str(x.score))
+                           for x in top[:5])
         bot.reply(comm, scores)
 
     def get_score(self, player):
@@ -346,8 +345,8 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
     def show_hand(self, bot, name):
         print "Showing hand for: " + name
-        cards = '. '.join((str(x + 1) + ": " + self.players[name][x]
-                            for x in xrange(len(self.players[name]))))
+        cards = '. '.join(str(i + 1) + ": " + card
+                          for i, card in enumerate(self.players[name]))
 
         bot.notice(name, "Your hand is: [{0}]".format(cards))
 
@@ -536,8 +535,8 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             dealer = "Yes" if user == self.plugin.dealer else "No"
             hand = "None"
             if user in self.plugin.players:
-                hand = '. '.join((str(x + 1) + ": " + self.plugin.players[user][x]
-                    for x in xrange(len(self.plugin.players[user]))))
+                hand = '. '.join(str(i + 1) + ": " + card
+                    for i, card in enumerate(self.plugin.players[user]))
 
             # Since we can't print new lines...
             msgs = zip(msg, [user, score, playing, dealer, hand])
