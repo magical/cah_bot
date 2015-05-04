@@ -272,7 +272,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         return "\x0309" + txt + "\x03"
 
     def get_player_str(self):
-        return ' '.join(sorted(self.players.keys(), key=lambda x: x))
+        return ' '.join(sorted(self.players.keys()))
 
     def show_top_scores(self, bot, comm, current_players=True):
         if current_players:
@@ -467,7 +467,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                                     for i in indices]
 
             # Don't change index of cards that are being removed..
-            for index in reversed(sorted(indices, key=lambda x: x)):
+            for index in reversed(sorted(indices)):
                 self.plugin.players[user].pop(index - 1)
 
 
@@ -688,7 +688,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             indices = set(map(int, groups[0].split(" ")))
 
             # Don't change index of cards that are being removed..
-            for index in reversed(sorted(indices, key=lambda x: x)):
+            for index in reversed(sorted(indices)):
                 exchange = self.plugin.players[user].pop(index - 1)
                 self.plugin.white_discard.append(exchange)
 
