@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 with open('requirements.txt') as f:
     requirements = [l.strip() for l in f]
@@ -11,5 +11,8 @@ setup(
     author_email='deanjohnson222@gmail.com',
     url='https://github.com/johnsdea/cah_bot',
     install_requires=requirements,
-    package_data={'cah': ['requirements.txt', 'README.md', 'LICENSE']}
+    package_data={'cah': ['requirements.txt', 'README.md', 'LICENSE']},
+    entry_points = {
+        'hamperbot.plugins': [ "cah = cah.cah:CardsAgainstHumanity" ],
+    },
 )

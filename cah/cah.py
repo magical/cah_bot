@@ -768,6 +768,3 @@ class CAHTable(SQLAlchemyBase):
 
     def __repr__(self):
         return "%s: %d" % self.user, self.score
-
-
-cah = CardsAgainstHumanity()
