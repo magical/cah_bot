@@ -381,7 +381,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
     def show_hand(self, bot, user):
         """Send a player a notice listing the cards in their hand."""
 
-        print "Showing hand for: " + user
         cards = '. '.join(str(i + 1) + ": " + card
                           for i, card in enumerate(self.players[user]))
 
@@ -420,7 +419,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         long_desc = 'Joins the current Cards Against Humanity game.'
 
         def command(self, bot, comm, groups):
-            print "intercepted join command!"
             user = comm['user']
             if user in self.plugin.players:
                 return bot.reply(comm, self.plugin.already_in.format(user))
@@ -451,7 +449,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         long_desc = 'Leaves the current Cards Against Humanity game.'
 
         def command(self, bot, comm, groups):
-            print "intercepted leave command!"
             user = comm['user']
 
             if (user not in self.plugin.players and
@@ -472,8 +469,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                      '<card #>".')
 
         def command(self, bot, comm, groups):
-            print "intercepted play command!"
-
             user = comm['user']
             if user not in self.plugin.players:
                 return bot.reply(comm, self.plugin.not_in.format(user))
@@ -536,7 +531,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                      ' <card #>".')
 
         def command(self, bot, comm, groups):
-            print "intercepted winner command!"
             user = comm['user']
             if self.plugin.state != "winner":
                 return bot.reply(comm, "[*] {0}, it is not time to choose a "
@@ -568,7 +562,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         long_desc = 'Shows information about yourself regarding the game.'
 
         def command(self, bot, comm, groups):
-            print "intercepted mystatus command!"
             user = comm['user']
             msg = ["{0}", "Score: {0}", "Playing: {0}", "Dealer: {0}",
                     "Hand: [{0}]"]
@@ -598,8 +591,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         long_desc = 'Shows players playing, and in the queue.'
 
         def command(self, bot, comm, groups):
-            print "intercepted players command"
-
             bot.reply(comm, self.plugin.current_players())
             bot.reply(comm, self.plugin.queued_players())
 
@@ -612,10 +603,8 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                      'players vote to kick a player, they should be kicked.')
 
         def command(self, bot, comm, groups):
-            print "intercepted kick command"
             user = comm['user']
             target = groups[0]
-            print target
 
             if not self.plugin.players.get(target):
                 return bot.reply(comm, "[*] Player '{0}' doesn't exist...".format(target))
@@ -642,7 +631,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         short_desc = '!hand - Shows your current hand.'
 
         def command(self, bot, comm, groups):
-            print "intercepted hand command"
             self.plugin.show_hand(bot, comm['user'])
 
     class AddCard(Command):
@@ -654,8 +642,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                      'To indicate the blanks for a black card, use one "_".')
 
         def command(self, bot, comm, groups):
-            print "intercepted addcard command"
-
             desc = groups[0]
             color = groups[1].replace('"', '')
 
@@ -690,8 +676,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         short_desc = '!poke - Pokes a player with a short reminder.'
 
         def command(self, bot, comm, groups):
-            print "intercepted poke command"
-
             # Get rid of trailing whitespace.
             target = groups[0].strip()
 
@@ -724,8 +708,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         short_desc = '!redraw - Provide indices to redraw for. Cost: 1 point.'
 
         def command(self, bot, comm, groups):
-            print 'intercepted redraw command'
-
             user = comm['user']
             if user not in self.plugin.players:
                 return bot.notice(user, self.plugin.not_in.format(user))
@@ -752,8 +734,6 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         short_desc = '!gamestatus - Sends you stats about the current game.'
 
         def command(self, bot, comm, groups):
-            print 'intercepted GameStatus command'
-
             responses = []
             responses.append('    Player    |    Played    |    Dealer    |    Score')
             responses.append('______________|______________|______________|____________')
