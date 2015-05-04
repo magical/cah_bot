@@ -480,7 +480,10 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             # Try to parse the list of indices
             blanks = self.plugin.prompt.count(BLANK)
             indices = []
-            if groups[1] == 'random':
+            if not groups[1]:
+                return bot.reply(comm,
+                    "[*] {0}, you didn't provide hand index(s) for cards!".format(user))
+            elif groups[1] == 'random':
                 hand = self.plugin.players[user]
                 indices = random.sample(xrange(len(hand)), blanks)
             else:
@@ -488,11 +491,15 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                     indices = map(int, groups[1].split(" "))
                 except (IndexError, ValueError):
                     return bot.reply(comm,
-                        "[*] {0}, you didn't provide hand index(s) for cards!".format(user))
+                        "[*] {0}, that doesn't look like index(s) for cards.".format(user))
 
                 if len(indices) != blanks:
                     return bot.reply(comm,
                         "[*] {0}, you didn't provide the correct amount of cards!".format(user))
+
+                if not all(1 <= n <= len(self.plugin.players[user]) for n in indices):
+                    return bot.reply(comm,
+                        "[*] {0}, you don't have card(s) with those index(s).".format(user))
 
             # If the player has already played, take the previous answers back
             if user in self.plugin.answers:
