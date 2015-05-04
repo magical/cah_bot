@@ -13,6 +13,9 @@ from twisted.internet import reactor
 
 SQLAlchemyBase = declarative_base()
 
+# BLANK is the magic marker used to denote blanks
+# in the card descriptions.
+BLANK = "_" * 10
 
 class CardsAgainstHumanity(ChatCommandPlugin):
     """ Play the classic card game Cards Against Humanity """
@@ -262,7 +265,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
 
     def colorize(self, txt):
-        if txt == '_' * 10:
+        if txt == BLANK:
             # Returns the light cyan color code
             return "\x0311" + txt + "\x03"
         # Returns the light green color code
@@ -331,13 +334,14 @@ class CardsAgainstHumanity(ChatCommandPlugin):
     def init_black(self, card):
         card = card.strip("\n")
         if card:
-            if "__________" not in card:
+            if BLANK not in card:
                 card += " __________."
-            return ''.join(map(self.colorize, re.split("(" + '_'*10 + ")", card)))
+            return ''.join(map(self.colorize, re.split("(" + BLANK + ")", card)))
 
     def format_black(self, card):
-        for x in xrange(card.count("__________")):
-            card = card.replace("__________", "{" + str(x) + "}", 1)
+        # FIXME: This is quadratic
+        for i in xrange(card.count(BLANK)):
+            card = card.replace(BLANK, "{" + str(i) + "}", 1)
         return card
 
     def show_hand(self, bot, name):
@@ -443,7 +447,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                 num = random.randint(0, len(self.plugin.players[user]))
                 while (num not in indices and
                     groups[1] == 'random' and
-                    len(indices) < self.plugin.prompt.count("_" * 10)):
+                    len(indices) < self.plugin.prompt.count(BLANK)):
 
                     indices += [num]
                     num = random.randint(0, len(self.plugin.players[user]))
@@ -452,7 +456,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                     return bot.reply(comm, "[*] {0}, you didn't provide hand index(s) for cards!"
                                 .format(user))
 
-            if len(indices) != self.plugin.prompt.count("__________"):
+            if len(indices) != self.plugin.prompt.count(BLANK):
                 return ("[*] {0}, you didn't provide the correct amount"
                             "of cards!".format(user))
 
@@ -614,7 +618,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
             elif color == 'black':
                 underscore_re = re.compile('(_+)+')
-                formatted, num_replacements = underscore_re.subn('_'*10, desc)
+                formatted, num_replacements = underscore_re.subn(BLANK, desc)
 
                 if num_replacements == 0 or num_replacements > 3:
                     return bot.reply(comm, "[*] You provided too few or many blanks!")
