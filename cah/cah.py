@@ -24,9 +24,9 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
     priority = 1
 
-    NUM_CARDS = 8
-    TIME_ALLOWED = 180 # 3 minutes.
-    TIMES_TO_CHECK = 3 # Check 3 times for now.
+    NUM_CARDS = 8 # size of a hand
+    TIME_ALLOWED = 180 # give players 3 minutes to play
+    TIMES_TO_CHECK = 3 # issue up to 3 reminders
 
     long_desc = ('!j or !join - Joins the game.\n'
                  '!leave - Leaves the game.\n'
@@ -34,40 +34,53 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                  '!winner <answer #> - Chooses a winner for a given prompt.'
                  '!mystatus - Shows information about yourself.')
 
-    player_queue = []
-    dealer_queue = []
-
-    black_discard = []
-    white_discard = []
-
-    state = "join"
-
-    players = defaultdict(list)
-    prompt = ""
-    dealer = ""
-
-    #it is inefficient to build this list everytime we need it.
-    avail_players = []
-    answers = defaultdict(list)
-    kick_votes = defaultdict(list)
-
     already_in = "[*] {0}, you are already a part of the game!"
     not_in = "[*] {0}, you are not a part of the game!"
 
     def setup(self, loader):
         super(CardsAgainstHumanity, self).setup(loader)
-        self.db = loader.db
-        SQLAlchemyBase.metadata.create_all(self.db.engine)
 
-        ct = self.db.session.query(CardTable)
+        self.db = loader.db # the database
+        self.state = "join" # current state - join, play, or winner
+
+        # State which carries over between rounds
+        #
+
+        # Cards and discard piles
+        # Black cards are question cards
+        # White cards are answers
+        self.whites = []
+        self.blacks = []
+        self.black_discard = []
+        self.white_discard = []
+
+        self.players = defaultdict(list) # maps player name to their hand
+
+        # State which is discarded between rounds
+        #
+
+        self.dealer = "" # name of player who is judging this round
+        self.prompt = "" # current prompt card
+        self.answers = defaultdict(list) # maps player name to played card(s)
+        self.kick_votes = defaultdict(list) # maps player name to kick votes for that player
+
+        # list of players who aren't the dealer
+        # it is inefficient to build this list everytime we need it.
+        self.avail_players = []
+
+        self.player_queue = [] # people who will join the next round
+        self.dealer_queue = [] # the order for dealing
+
+        # Create the database tables, if necessary
+        SQLAlchemyBase.metadata.create_all(self.db.engine)
 
         # Update the db
         self.flush_db()
 
-        whites = ct.filter_by(color="white").all()
-        blacks = ct.filter_by(color="black").all()
-        self.whites = [white.desc for white in whites]
-        self.blacks = [black.desc for black in blacks]
+        # Load the cards
+        q = self.db.session.query(CardTable)
+        self.whites = [x.desc for x in q.filter_by(color="white")]
+        self.blacks = [x.desc for x in q.filter_by(color="black")]
 
         random.seed()
 
@@ -75,27 +88,34 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         random.shuffle(self.blacks)
 
     def remove_player(self, bot, comm, player):
+        """Remove a player from the game, discarding their cards.
+
+        If there aren't enough players, play is suspended until another player
+        joins.  If everyone else has played, judging begins.  If the dealer
+        leaves, a new round starts.
+        """
         # Return cards to discard
-        self.white_discard += self.players[player]
+        if player in self.players:
+            self.white_discard += self.players[player]
+        if player in self.answers:
+            self.white_discard += self.answers[player]
 
         # Remove player
-        del self.players[player]
+        if player in self.players:
+            del self.players[player]
+        if player in self.avail_players:
+            self.avail_players.remove(player)
+        if player in self.answers:
+            del self.answers[player]
         if player in self.kick_votes:
             del self.kick_votes[player]
-
         if player in self.player_queue:
             self.player_queue.remove(player)
-
-        while player in self.dealer_queue:
+        if player in self.dealer_queue:
             self.dealer_queue.remove(player)
 
         if self.state == "play":
-            if player in self.avail_players:
-                if player in self.answers:
-                    self.white_discard += self.answers[player]
-                    del self.answers[player]
-                self.avail_players.remove(player)
-            elif player == self.dealer:
+            if player == self.dealer:
                 bot.reply(comm, "[*] Game restarting... dealer left.")
                 self.reset(bot, comm)
 
@@ -112,54 +132,61 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
         elif self.state == "winner":
             if player == self.dealer:
-                bot.reply(comm, "[*] Game restarting... Dealer left.")
+                bot.reply(comm, "[*] Game restarting... dealer left.")
                 self.reset(bot, comm)
 
         bot.reply(comm, self.current_players())
 
     def give_point(self, user):
+        """Award a point to the user."""
         player_str = self.get_player_str()
-        winner = self.db.session.query(CAHTable).filter_by(game=player_str,
-                                                      user=user).first()
-        try:
-            winner.score += 1
-        except AttributeError:
-            self.db.session.add(CAHTable(user, player_str, score=1))
+
+        q = self.db.session.query(CAHTable).filter_by(game=player_str)
+        winner = q.filter_by(user=user).first()
+        if winner is None:
+            winner = CAHTable(user, player_str)
+        winner.score += 1
+        self.db.session.add(winner)
 
         for player in self.players:
-            if not self.db.session.query(CAHTable).filter_by(game=player_str, user=player).first():
-                self.db.session.add(CAHTable(user=player, game=player_str))
+            if not q.filter_by(user=player).first():
+                self.db.session.add(CAHTable(player, player_str))
 
         self.db.session.commit()
 
     def take_point(self, user):
+        """Penalize the user one point."""
         player_str = self.get_player_str()
-        winner = self.db.session.query(CAHTable).filter_by(game=player_str,
-                                                      user=user).first()
-        if not winner or winner.score <= 0:
+        q = self.db.session.query(CAHTable).filter_by(game=player_str)
+        winner = q.filter_by(user=user).first()
+        if winner is None or winner.score <= 0:
             return False
-
         winner.score -= 1
+        self.db.session.add(winner)
+
         for player in self.players:
-            if not self.db.session.query(CAHTable).filter_by(game=player_str, user=player).first():
-                self.db.session.add(CAHTable(user=player, game=player_str))
+            if not q.filter_by(user=player).first():
+                self.db.session.add(CAHTable(player, player_str))
 
         self.db.session.commit()
         return True
 
     def deal(self, user):
+        """Refill a player's hand."""
         while len(self.players[user]) < self.NUM_CARDS:
             self.players[user].append(self.whites.pop(0))
 
     def reset(self, bot, comm):
-        # Fill black discard
+        """End the current round. Does not award any points."""
+
+        # Discard the prompt
         self.black_discard.append(self.prompt)
 
-        # Fill white discard
-        for p in self.avail_players:
-            for c in self.answers[p]:
-                self.white_discard.append(c)
+        # Discard the answers
+        for p in self.players:
+            self.white_discard += self.answers[p]
 
+        self.prompt = ""
         self.answers.clear()
         self.kick_votes.clear()
 
@@ -174,17 +201,14 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             random.shuffle(self.whites)
             self.white_discards = []
 
-        # Fill up dealer_queue
-        for p in self.players:
-            if p not in self.player_queue:
-                self.player_queue += [p]
-
+        # Add queued players
         for p in self.player_queue:
             if p not in self.players:
                 bot.reply(comm, '{0} has joined the game!'.format(p))
             self.deal(p)
         del self.player_queue[:]
 
+        # Start another round?
         if len(self.players) > 2:
             self.prep_play(bot, comm)
         else:
@@ -227,7 +251,10 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         elif state == 'winner':
             return player == self.dealer
 
+        return False
+
     def change_state(self, bot, comm, state):
+        """Set the state and start AFK timers."""
         self.state = state
         interval = self.TIME_ALLOWED/self.TIMES_TO_CHECK
         if state == 'play':
@@ -243,17 +270,22 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                               str(self.dealer))
 
     def prep_play(self, bot, comm):
+        """Set up the a new round"""
+
+        # Select a dealer
         if not self.dealer_queue:
             self.dealer_queue += self.players
-
         self.dealer = self.dealer_queue.pop(0)
-        self.prompt = self.blacks.pop(0)
         self.avail_players = [p for p in self.players if p != self.dealer]
 
-        bot.reply(comm, "[*] {0} reads: {1}".format(self.dealer, self.prompt))
-        bot.reply(comm, "[*] Type: \"!play <card #>\" to fill blanks. Multiple "
-                        "cards are played with \"!play <card #> <card #>\".")
+        # Draw a prompt card
+        self.prompt = self.blacks.pop(0)
 
+        bot.reply(comm, "[*] {0} reads: {1}".format(self.dealer, self.prompt))
+        bot.reply(comm, '[*] Type: "!play <card #>" to fill blanks. Multiple '
+                        'cards are played with "!play <card #> <card #>".')
+
+        # Deal new cards to everybody
         for p in self.players:
             self.deal(p)
 
@@ -275,23 +307,27 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         return ' '.join(sorted(self.players.keys()))
 
     def show_top_scores(self, bot, comm, current_players=True):
+        """Print a table of the top 5 scores.
+
+        If current_players is True, show scores only for games between the
+        current set of players.
+        """
+
         if current_players:
             player_str = self.get_player_str()
-            print player_str
             top = self.db.session.query(CAHTable).filter_by(game=player_str).order_by(
                     CAHTable.score.desc()).all()
         else:
             top = self.db.session.query(CAHTable).order_by(
                         CAHTable.score.desc().all())
 
-        scores_str = '{:^14} {:^14}\n____________________________'
-        bot.reply(comm, scores_str.format('User', 'Score'))
-        scores_str = '{:^14}|{:^14}'
-        scores = '\n'.join(scores_str.format(x.user, str(x.score))
-                           for x in top[:5])
-        bot.reply(comm, scores)
+        bot.reply(comm, '{:^14} {:^14}'.format('User', 'Score'))
+        bot.reply(comm, '____________________________')
+        for x in top[:5]:
+            bot.reply(comm, '{:^14}|{:^14}'.format(x.user, str(x.score)))
 
     def get_score(self, player):
+        """Return a player's score in games between the current set of players."""
         player_str = self.get_player_str()
         player_obj = (self.db.session.query(CAHTable)
                         .filter_by(game=player_str)
@@ -303,9 +339,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         return 0
 
     def flush_db(self):
-        """
-        Clear out old cards, and bring in new ones.
-        """
+        """Clear out old cards, and bring in new ones."""
         self.db.session.query(CardTable).filter_by(official=True).delete()
 
         url = "http://web.engr.oregonstate.edu/~johnsdea/"
@@ -315,11 +349,11 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         new_whites = map(self.format_white, whites_txt)
         for white in new_whites:
             if white:
-                self.db.session.add(CardTable(ude(white), "white"))
+                self.db.session.add(CardTable(ude(white), "white", official=True))
         new_blacks = map(self.init_black, blacks_txt)
         for black in new_blacks:
             if black:
-                self.db.session.add(CardTable(ude(black), "black"))
+                self.db.session.add(CardTable(ude(black), "black", official=True))
 
         self.db.session.commit()
 
@@ -328,14 +362,15 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         if card:
             if card.endswith("."):
                 card = card[:-1]
-            return card
+        return card
 
     def init_black(self, card):
         card = card.strip("\n")
         if card:
             if BLANK not in card:
-                card += " __________."
+                card += " " + BLANK + "."
             return ''.join(map(self.colorize, re.split("(" + BLANK + ")", card)))
+        return ''
 
     def format_black(self, card):
         # FIXME: This is quadratic
@@ -343,29 +378,35 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             card = card.replace(BLANK, "{" + str(i) + "}", 1)
         return card
 
-    def show_hand(self, bot, name):
-        print "Showing hand for: " + name
-        cards = '. '.join(str(i + 1) + ": " + card
-                          for i, card in enumerate(self.players[name]))
+    def show_hand(self, bot, user):
+        """Send a player a notice listing the cards in their hand."""
 
-        bot.notice(name, "Your hand is: [{0}]".format(cards))
+        print "Showing hand for: " + user
+        cards = '. '.join(str(i + 1) + ": " + card
+                          for i, card in enumerate(self.players[user]))
+
+        bot.notice(user, "Your hand is: [{0}]".format(cards))
 
     def show_answers(self, bot, comm):
+        """Show a list of answers for judging."""
+
         for i, player in enumerate(self.avail_players):
             prompt = self.format_black(self.prompt)
             cards = prompt.format(*self.answers[player])
             text = ("[*] [Answer #{0}]: {1}".format(i + 1, cards))
             bot.reply(comm, text)
 
-        bot.reply(comm, "[*] {0}, please choose a winner with "
-                    "\"!winner <answer #>\".".format(self.dealer))
-
+        bot.reply(comm,
+            '[*] {0}, please choose a winner with "!winner <answer #>".'
+            .format(self.dealer))
 
     def current_players(self):
+        """Returns a formatted list of the current players."""
         players = ', '.join(p for p in self.players) + '.'
         return "[*] Current players: " + players
 
     def queued_players(self):
+        """Returns a formatted list of the queued players."""
         players = ', '.join(p for p in self.player_queue) + '.'
         return "[*] Queued Players: " + players
 
@@ -439,38 +480,40 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             elif user == self.plugin.dealer:
                 return bot.reply(comm, "[*] {0}, you are the dealer!".format(user))
 
-            try:
-                indices = map(int, groups[1].split(" "))
-            except:
-                indices = []
-                num = random.randint(0, len(self.plugin.players[user]))
-                while (num not in indices and
-                    groups[1] == 'random' and
-                    len(indices) < self.plugin.prompt.count(BLANK)):
+            # Try to parse the list of indices
+            blanks = self.plugin.prompt.count(BLANK)
+            indices = []
+            if groups[1] == 'random':
+                hand = self.plugin.players[user]
+                indices = random.sample(xrange(len(hand)), blanks)
+            else:
+                try:
+                    indices = map(int, groups[1].split(" "))
+                except (IndexError, ValueError):
+                    return bot.reply(comm,
+                        "[*] {0}, you didn't provide hand index(s) for cards!".format(user))
 
-                    indices += [num]
-                    num = random.randint(0, len(self.plugin.players[user]))
+                if len(indices) != blanks:
+                    return bot.reply(comm,
+                        "[*] {0}, you didn't provide the correct amount of cards!".format(user))
 
-                if not indices:
-                    return bot.reply(comm, "[*] {0}, you didn't provide hand index(s) for cards!"
-                                .format(user))
-
-            if len(indices) != self.plugin.prompt.count(BLANK):
-                return bot.reply(comm, "[*] {0}, you didn't provide the correct amount"
-                                       "of cards!".format(user))
-
+            # If the player has already played, take the previous answers back
             if user in self.plugin.answers:
                 self.plugin.players[user] += self.plugin.answers[user]
                 del self.plugin.answers[user]
 
-            self.plugin.answers[user] = [self.plugin.players[user][i - 1]
-                                    for i in indices]
+            # Add the played cards to the answer pile
+            self.plugin.answers[user] = [
+                self.plugin.players[user][index - 1]
+                for index in indices
+            ]
 
-            # Don't change index of cards that are being removed..
+            # Remove them from the player's hand
+            # but be careful about it
             for index in reversed(sorted(indices)):
                 self.plugin.players[user].pop(index - 1)
 
-
+            # If everybody has played, start judging
             if len(self.plugin.answers) == len(self.plugin.avail_players):
                 bot.reply(comm, "[*] All players have turned in their cards.")
                 random.shuffle(self.plugin.avail_players)
@@ -500,11 +543,9 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             except ValueError:
                 return bot.reply(comm, "[*] {0}, that is not a valid winner!".format(user))
 
-            if winner_ind < 1 or winner_ind > len(self.plugin.answers):
-                return bot.reply(comm, "[*] {0}, that answer doesn't exist!"
-                            .format(user))
+            if not 1 <= winner_ind <= len(self.plugin.answers):
+                return bot.reply(comm, "[*] {0}, that answer doesn't exist!".format(user))
 
-            winner = ""
             winner = self.plugin.avail_players[winner_ind - 1]
             bot.reply(comm, "[*] {0}, you won this round! Congrats!".format(winner))
 
@@ -526,8 +567,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                     "Hand: [{0}]"]
 
             score = 0
-            player = self.plugin.db.session.query(CAHTable).filter_by(user=user
-                        ).first()
+            player = self.plugin.db.session.query(CAHTable).filter_by(user=user).first()
             if player:
                 score = player.score
 
@@ -650,24 +690,25 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
             if target not in self.plugin.players:
                 return bot.reply(comm, '[*] That player is not playing right now!')
+
             elif target == comm['user']:
-                return bot.reply(comm, '[&] Why are you poking yourself?')
-            if target == self.plugin.dealer:
+                return bot.reply(comm, '[*] Why are you poking yourself?')
+
+            elif target == self.plugin.dealer:
                 if self.plugin.state != 'winner':
                     return bot.reply(comm, '[*] The dealer doesn\'t need to do '
                                      'anything right now.')
                 self.plugin.show_answers(bot, comm)
+
             else:
-                if self.plugin.state == 'play':
-                    if target not in self.plugin.answers:
-                        bot.notice(target, '[*] Please play a card.')
-                        self.plugin.show_hand(bot, target)
-                    else:
-                        return bot.reply(comm, '[*] {0} has already played their '
-                                         'cards!'.format(target))
-                else:
-                    return bot.reply(comm, '[*] Players do not need to do anything'
-                                     ' right now.')
+                if self.plugin.state != 'play':
+                    return bot.reply(comm, '[*] Players do not need to do anything right now.')
+
+                if target in self.plugin.answers:
+                    return bot.reply(comm, '[*] {0} has already played their cards!'.format(target))
+
+                bot.notice(target, '[*] Please play a card.')
+                self.plugin.show_hand(bot, target)
 
     class Redraw(Command):
         name = 'redraw'
@@ -743,7 +784,6 @@ class CardTable(SQLAlchemyBase):
         self.official = official
 
     def __repr__(self):
-        print self.desc
         return self.desc
 
 
