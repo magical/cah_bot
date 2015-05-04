@@ -233,7 +233,9 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         self.state = state
         interval = self.TIME_ALLOWED/self.TIMES_TO_CHECK
         if state == 'play':
-            for player in filter(lambda x: x != self.dealer, self.players):
+            for player in self.players:
+                if player == self.dealer:
+                    continue
                 reactor.callLater(interval, self.start_afk_watcher,
                                   bot, comm, str(self.prompt), str(self.state),
                                   str(player))
