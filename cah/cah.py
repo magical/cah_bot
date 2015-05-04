@@ -25,6 +25,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
     priority = 1
 
     NUM_CARDS = 8 # size of a hand
+    MIN_PLAYERS = 3 # number of players required to play
     TIME_ALLOWED = 180 # give players 3 minutes to play
     TIMES_TO_CHECK = 3 # issue up to 3 reminders
 
@@ -119,7 +120,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                 bot.reply(comm, "[*] Game restarting... dealer left.")
                 self.reset(bot, comm)
 
-            if len(self.players) < 3:
+            if len(self.players) < self.MIN_PLAYERS:
                 bot.reply(comm, "[*] There are fewer than 3 players playing "
                             "now. Waiting for more players...")
                 self.reset(bot, comm)
@@ -209,7 +210,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         del self.player_queue[:]
 
         # Start another round?
-        if len(self.players) > 2:
+        if len(self.players) >= self.MIN_PLAYERS:
             self.prep_play(bot, comm)
         else:
             self.change_state(bot, comm, 'join')
@@ -428,7 +429,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
             # This is only when the game is first starting.
             if self.plugin.state == "join":
                 self.plugin.deal(user)
-                if len(self.plugin.players) > 2:
+                if len(self.plugin.players) >= self.MIN_PLAYERS:
                     bot.reply(comm, "[*] {0} has joined the game! There are "
                                 "now enough players to play!".format(user))
                     self.plugin.prep_play(bot, comm)
