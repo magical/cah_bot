@@ -59,12 +59,10 @@ class CardsAgainstHumanity(ChatCommandPlugin):
         self.db = loader.db
         SQLAlchemyBase.metadata.create_all(self.db.engine)
 
-        flush = True
         ct = self.db.session.query(CardTable)
 
-        # Update db if it's empty.
-        if ct.count() == 0 or flush:
-            self.flush_db()
+        # Update the db
+        self.flush_db()
 
         whites = ct.filter_by(color="white").all()
         blacks = ct.filter_by(color="black").all()
