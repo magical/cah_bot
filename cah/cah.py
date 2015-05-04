@@ -435,7 +435,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
             user = comm['user']
             if user not in self.plugin.players:
-                return self.plugin.not_in.format(user)
+                return bot.reply(comm, self.plugin.not_in.format(user))
             elif user == self.plugin.dealer:
                 return bot.reply(comm, "[*] {0}, you are the dealer!".format(user))
 
@@ -456,8 +456,8 @@ class CardsAgainstHumanity(ChatCommandPlugin):
                                 .format(user))
 
             if len(indices) != self.plugin.prompt.count(BLANK):
-                return ("[*] {0}, you didn't provide the correct amount"
-                            "of cards!".format(user))
+                return bot.reply(comm, "[*] {0}, you didn't provide the correct amount"
+                                       "of cards!".format(user))
 
             if user in self.plugin.answers:
                 self.plugin.players[user] += self.plugin.answers[user]
@@ -680,7 +680,7 @@ class CardsAgainstHumanity(ChatCommandPlugin):
 
             user = comm['user']
             if user not in self.plugin.players:
-                return self.plugin.not_in.format(user)
+                return bot.notice(user, self.plugin.not_in.format(user))
 
             if not self.plugin.take_point(user):
                 return bot.notice(user, "You don't have enough points to do that.")
